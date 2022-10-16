@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.8;
 
-Raffle__NotEnoughEthEntered();
+error Raffle__NotEnoughEthEntered();
 
 ///@author Keegan Anglim
 ///@title Raffle
 contract Raffle{
-    // entrance fee is set in constructor
+    /* State variables */
     uint256 private immutable i_entranceFee;
+    address payable[] private players;
 
     constructor(uint256 entranceFee){
         i_entranceFee = entranceFee;
