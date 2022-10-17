@@ -8,9 +8,14 @@ import "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.s
 error Raffle__NotEnoughEthEntered();
 error Raffle__TransferFailed();
 error Raffle__NotOpen();
+error Raffle__UpkeepNotNeeded(uint256 currentBalance, uint256 numPlayers, uint256 raffleState);
 
-///@author Keegan Anglim
-///@title Raffle
+/** @author Patrick Collins, Keegan Anglim
+* @title Raffle
+* @notice This contract is for creating an tamper proof, decentralized,
+* smart contract.
+* @dev This implement Chainlink VRF v2 and Chainlink Automation
+*/
 contract Raffle is VRFConsumerBaseV2, AutomationCompatibleInterface{
 
     /* Type declarations */
@@ -37,7 +42,14 @@ contract Raffle is VRFConsumerBaseV2, AutomationCompatibleInterface{
     uint256 private immutable i_interval;
     
 
-    constructor(address vrfCoordinatorV2, uint256 entranceFee, bytes32 gasLane, uint64 subscriptionId, uint32 callbackGasLimit, uint256 interval) VRFConsumerBaseV2(vrfCoordinatorV2){
+    constructor(
+        address vrfCoordinatorV2,
+        uint256 entranceFee,
+        bytes32 gasLane,
+        uint64 subscriptionId,
+        uint32 callbackGasLimit,
+        uint256 interval)
+        VRFConsumerBaseV2(vrfCoordinatorV2){
         i_entranceFee = entranceFee;
         i_vrfCoordinator = VRFCoordinatorV2Interface(vrfCoordinatorV2);
         i_gasLane = gasLane;
@@ -53,6 +65,7 @@ contract Raffle is VRFConsumerBaseV2, AutomationCompatibleInterface{
     event RequestedRaffleWinner(uint256 indexed requestId);
     event WinnerPicked(address indexed winner);
 
+    /* Functions */
     ///@dev Sign up for raffle by sending required funds
     function enterRaffle() public payable {
         if (msg.value < i_entranceFee){
@@ -66,8 +79,12 @@ contract Raffle is VRFConsumerBaseV2, AutomationCompatibleInterface{
     }
 
     // external is cheaper, this contract can't call it
-    function requestRandomWinner() external {
-        s_raffleState = RaffleState.CALCULATING;
+    function performUpkeep(bytes calldata /* performData */) external override {
+        (bool upkeepNeeded, ) = checkUpkeep("");
+        if (!upkeepNeeded){
+            revert Raffle__UpkeepNotNeeded(address(this).balance, s_players.length, uint256(s_raffleState));
+        }
+            s_raffleState = RaffleState.CALCULATING;
             uint256 requestId = i_vrfCoordinator.requestRandomWords(
             i_gasLane,
             i_subscriptionId,
@@ -84,6 +101,7 @@ contract Raffle is VRFConsumerBaseV2, AutomationCompatibleInterface{
         s_recentWinner = recentWinner;
         s_raffleState = RaffleState.OPEN;
         s_players = new address payable[](0);
+        s_lastTimeStamp = block.timestamp;
         (bool success, ) = recentWinner.call{value: address(this).balance}("");
         if (!success){
             revert Raffle__TransferFailed();
@@ -100,7 +118,7 @@ contract Raffle is VRFConsumerBaseV2, AutomationCompatibleInterface{
      * 3. Subscription is funded with LINK.
      * 4. The Lottery should be in an 'open' state. 
      */
-    function checkUpkeep(bytes calldata /* checkData */ ) external returns (bool upkeepNeeded, bytes memory /* performData */){
+    function checkUpkeep(bytes memory /* checkData */ ) public returns (bool upkeepNeeded, bytes memory /* performData */){
         bool isOpen = s_raffleState == RaffleState.OPEN;
         bool timePassed = ((block.timestamp - s_lastTimeStamp) > i_interval);
         bool hasPlayers = (s_players.length > 0);
@@ -108,7 +126,7 @@ contract Raffle is VRFConsumerBaseV2, AutomationCompatibleInterface{
         upkeepNeeded = (isOpen && timePassed && hasPlayers && hasBalance);
     }
 
-    function performUpkeep(bytes calldata performData) external{}
+    
 
     /* view/pure functions */
     function getEntranceFee() public view returns(uint256){
@@ -121,5 +139,25 @@ contract Raffle is VRFConsumerBaseV2, AutomationCompatibleInterface{
 
     function getRecentWinner() public view returns(address){
         return s_recentWinner;
+    }
+
+    function getRaffleState() public view returns(RaffleState){
+        return s_raffleState;
+    }
+
+    function getNumWords() public pure returns(uint256){
+        return NUM_WORDS;
+    }
+
+    function getNumPlayers() public view returns(uint256){
+        return s_players.length;
+    }
+
+    function getLatestTimeStamp() public view returns(uint256){
+        return s_lastTimeStamp;
+    }
+
+    function getRequestConfirmations() public pure returns(uint256){
+        return REQUEST_CONFIRMATIONS;
     }
 }
