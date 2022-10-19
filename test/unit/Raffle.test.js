@@ -52,5 +52,17 @@ const {developmentChains, networkConfig} = require("../../helper.hardhat-config"
                 await expect(raffle.enterRaffle({value: raffleEntranceFee})).to.be.revertedWith("Raffle__NotOpen");
             });
 
+        });
+        describe("checkUpkeep", async function(){
+            it("returns false if people haven't sent any eth", async function(){
+                // make everyting true exept for the funding amount
+                await network.provider.send("evm_increaseTime", [interval.toNumber() + 1]);
+                await network.provider.send("evm_mine", []);
+                // simulate the trasaction rather than calling the public method and starting a transaction.
+                // callStatic just to see response
+                const {upkeepNeeded} = await raffle.callStatic.checkUpkeep([]);
+                assert(!upkeepNeeded);
+
+            })
         })
     })
